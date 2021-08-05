@@ -3,6 +3,12 @@ package kv
 import "context"
 
 type Transaction interface {
+	Reader
+	Writer
+	Deleter
+	Scanner
+	Iterator
+
 	// Commit atomically makes all transaction changes durable and visible on the
 	// backing kv store.  Returns sql.ErrTxDone if transaction was already
 	// committed or rolled back.

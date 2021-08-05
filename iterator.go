@@ -3,27 +3,27 @@ package kv
 import "context"
 
 type Iterator interface {
-	// Ascend runs the user callback with key-value pair for a selected range in
-	// ascending order.  Range can be selected with begin and end parameters.
+	// Ascend runs the user callback with key-value pairs from a selected range
+	// in ascending order. Every key-value pair passed to the callback is
+	// considered as READ by the transaction.
 	//
-	// Iterated range is [begin, end) and ascending order requires begin <
-	// end. User callback is not run when begin >= end, except when both are
-	// empty strings.
+	// When both i and j are non-empty, the range begins with min(i,j) which is
+	// included and ends at max(i,j) which is excluded.
 	//
-	// When both begin and end are empty strings, then user callback is run for
-	// all key-value pairs in the database. Note that, if the database backend
-	// allows empty string "" as a valid key, then this callback behavior is
-	// different for empty keys and non-empty keys.
-	//
-	// Also, note that, when called from transactions, every key-value pair
-	// passed to the callback is considered as READ, which may impact the
-	// transaction Commit behavior.
-	Ascend(ctx context.Context, begin, end string, cb func(context.Context, string, string) error) error
+	// When one of i or j is an empty string, then range extends to the largest
+	// key (inclusive). When both i and j are empty strings, then range is all
+	// keys (inclusive) in the database.
+	Ascend(ctx context.Context, i, j string, cb func(context.Context, string, string) error) error
 
-	// Descend is similar to Ascend, but iterates in reverse direction. Iterated
-	// range is still [begin, end), but descending order requires begin >
-	// end. Similar to the Ascend, user callback is not run when begin <= end,
-	// except when both are empty string. Also, see the note if empty string is a
-	// valid key.
-	Descend(ctx context.Context, begin, end string, cb func(context.Context, string, string) error) error
+	// Descend is similar to Ascend, but works in the opposite direction. Every
+	// key-value pair passed to the callback is considered as READ by the
+	// transaction.
+	//
+	// When both i and j are non-empty, the range begins with max(i,j) which is
+	// included and ends at min(i,j) which is excluded.
+	//
+	// When one of i or j is an empty string, then range extends to the smallest
+	// key (inclusive) in the database. When both i and j are empty strings, then
+	// range is all keys (inclusive) in the database.
+	Descend(ctx context.Context, i, j string, cb func(context.Context, string, string) error) error
 }

@@ -7,7 +7,6 @@ type Transaction interface {
 	Writer
 	Deleter
 	Scanner
-	Iterator
 
 	// Commit atomically makes all transaction changes durable and visible on the
 	// backing kv store.  Returns sql.ErrTxDone if transaction was already

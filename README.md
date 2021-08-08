@@ -30,11 +30,11 @@ restricted to just utf8 characters.
 ## Empty string `""` is not a valid key
 
 Empty strings `""` are treated as *invalid* keys. All implementations are
-required to disallow reads and writes to empty keys.
+required to not allow reads and writes to empty strings.
 
-There are not many usecases where users need to use empty string as a key. An
-unique uuid-literal can serve the same purpose in most of the cases.
+There are not many usecases where users need to use an empty string as a
+key. An unique uuid-literal can serve the same purpose in most of the cases.
 
-[Iterator](https://pkg.go.dev/github.com/bvkgo/kv#Iterator) API uses empty
-strings to indicate the largest key (when ascending) or the smallest key (when
-descending) or all of the keys in the database.
+Also, [Iterator](https://pkg.go.dev/github.com/bvkgo/kv#Iterator) API uses
+empty strings to indicate all of the key range or the end of keys (i.e., the
+largest key when ascending or the smallest key when descending).

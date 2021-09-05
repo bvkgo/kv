@@ -2,6 +2,7 @@ package kv
 
 import "context"
 
+// Transaction lists the methods for read/write transactions.
 type Transaction interface {
 	Reader
 	Writer

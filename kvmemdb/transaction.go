@@ -25,17 +25,8 @@ type Transaction struct {
 	accesses map[string]*multival.Value
 }
 
-func (t *Transaction) Close() error {
-	if t.db == nil {
-		return nil
-	}
-	t.db.releasePin(t.lastCommitVersion)
-	t.db = nil
-	return nil
-}
-
 func (t *Transaction) String() string {
-	return fmt.Sprintf("tx-%d (%d)", t.version, t.lastCommitVersion)
+	return fmt.Sprintf("TX-%d (%d)", t.version, t.lastCommitVersion)
 }
 
 func (t *Transaction) Get(ctx context.Context, key string) (io.Reader, error) {

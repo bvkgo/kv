@@ -17,5 +17,4 @@ separate packages. For example, see
 
 This API *requires* that empty string `""` cannot be a valid
 key. [Iterator](https://pkg.go.dev/github.com/bvkgo/kv#Iterator) API uses empty
-strings to indicate all of the key range or the end of keys (i.e., the largest
-key when ascending or the smallest key when descending).
+strings to indicate the end of key range.

@@ -28,13 +28,13 @@ type Deleter interface {
 	Delete(ctx context.Context, key string) error
 }
 
-// Iterator represents a position in a range of key-value pairs visited by the
-// scan, ascend, descend, etc. operations. If there is any error encountered
-// when reading a key-value pair, then error is recorded in the iterator and
-// the iteration is stopped.
+// Iterator represents a position in a range of key-value pairs visited by
+// Ascend, Descend and Scan operations. If there is any error in reading a
+// key-value pair, it is recorded in the iterator and the iteration is stopped.
 //
-// In a trasactional context, only the key-value pairs that are accessed
-// through the iterator *may* be considered as accessed.
+// When used with transactions, only the key-value pairs that are returned
+// through Current and Next are considered as READ by the transaction for
+// conflict resolution.
 //
 //	it, err := db.Ascend(ctx, "aaa", "zzz")
 //	if err != nil {
@@ -54,21 +54,26 @@ type Deleter interface {
 //	  return err
 //	}
 type Iterator interface {
-	// Err returns any error recorded in the iterator. Returns nil when
-	// iteration has reached the end of range with no errors.
+	// Err returns any error recorded in the iterator.
+	//
+	// Reading from the database could encounter IO errors at any position,
+	// including the initial position.
+	//
+	// Returns nil when iteration has reached the end of range with no errors.
 	Err() error
 
 	// Current returns the key-value pair at the current position of the
-	// iterator. Iterator could encounter IO errors at any position, including
-	// the first object.
+	// iterator. It does not change the current position of the iterator.
 	//
-	// Returns the key-value pair and true on reading a key-value pair
-	// successfully. Returns a false when end of range is reached or on
-	// encountering any failure.
+	// Initial value is fetched from the database when an Iterator is created so,
+	// Current can be used immediately after creating the Iterator.
+	//
+	// Returns the key-value pair and true on success. Returns a false when end
+	// of range is reached or on encountering any failure.
 	Current(context.Context) (string, io.Reader, bool)
 
-	// Next advances the iterator to next position and reads the key-value pair
-	// at that position similar to Current.
+	// Next advances the iterator to next position and returns the key-value pair
+	// at that position.
 	Next(context.Context) (string, io.Reader, bool)
 }
 

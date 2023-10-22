@@ -1,16 +1,12 @@
 // Copyright (c) 2023 BVK Chaitanya
 
 /*
-Package kvmem implements an in-memory key-value database with snapshots and
+Package kvmemdb implements an in-memory key-value database with snapshots and
 read/write transactions. Snapshots can be taken periodically to backup and
 restore the database.
 
-Database can be used by multiple goroutines simultaneously, but the Snapshots
-and Transactions are *not* thread-safe and can only be used by a single
-goroutine.
-
-		DESIGN NOTES
-
-	 	All key-value data is stored in a shared sync.Map instance.
+Database can be used by multiple goroutines simultaneously, however, individual
+Snapshot and Transaction objects are not thread-safe; they can only be used by
+a single goroutine.
 */
 package kvmemdb

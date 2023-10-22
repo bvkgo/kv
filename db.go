@@ -8,11 +8,18 @@ type Snapshot interface {
 	Getter
 	Ranger
 	Scanner
+
+	Discard(ctx context.Context) error
 }
 
-// ReadOnlyTransaction represents a read-only transaction.
-type ReadOnlyTransaction interface {
-	Snapshot
+// Transaction represents a read-write transaction.
+type Transaction interface {
+	Getter
+	Ranger
+	Scanner
+
+	Setter
+	Deleter
 
 	// Rollback cancels a transaction without checking for conflicts. Returns nil
 	// on success.
@@ -31,16 +38,7 @@ type ReadOnlyTransaction interface {
 	Commit(ctx context.Context) error
 }
 
-// Transaction represents a read-write transaction.
-type Transaction interface {
-	ReadOnlyTransaction
-
-	Setter
-	Deleter
-}
-
 type Database interface {
-	WithSnapshot(ctx context.Context, fn func(context.Context, Snapshot) error) error
-	WithTransaction(ctx context.Context, fn func(context.Context, Transaction) error) error
-	WithReadOnlyTransaction(ctx context.Context, fn func(context.Context, ReadOnlyTransaction) error) error
+	NewTransaction(ctx context.Context) (Transaction, error)
+	NewSnapshot(ctx context.Context) (Snapshot, error)
 }

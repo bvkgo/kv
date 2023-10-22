@@ -51,45 +51,7 @@ func (db *DB) keys(skip map[string]*multival.Value) []string {
 	return keys
 }
 
-func (db *DB) WithSnapshot(ctx context.Context, f func(context.Context, kv.Snapshot) error) error {
-	snap := db.NewSnapshot()
-	defer kv.Close(snap)
-
-	if err := f(ctx, snap); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (db *DB) WithTransaction(ctx context.Context, f func(context.Context, kv.Transaction) error) error {
-	tx := db.NewTransaction()
-	defer tx.Rollback(ctx)
-
-	if err := f(ctx, tx); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (db *DB) WithReadOnlyTransaction(ctx context.Context, f func(context.Context, kv.ReadOnlyTransaction) error) error {
-	tx := db.NewTransaction()
-	defer tx.Rollback(ctx)
-
-	if err := f(ctx, tx); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (db *DB) NewSnapshot() *Snapshot {
+func (db *DB) NewSnapshot(ctx context.Context) (kv.Snapshot, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -99,10 +61,10 @@ func (db *DB) NewSnapshot() *Snapshot {
 	}
 
 	db.pins[db.maxCommitVersion]++
-	return s
+	return s, nil
 }
 
-func (db *DB) NewTransaction() *Transaction {
+func (db *DB) NewTransaction(ctx context.Context) (kv.Transaction, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -117,7 +79,7 @@ func (db *DB) NewTransaction() *Transaction {
 	}
 
 	db.pins[db.maxCommitVersion]++
-	return t
+	return t, nil
 }
 
 func (db *DB) releasePin(version int64) {

@@ -73,21 +73,26 @@ type Iterator interface {
 }
 
 type Ranger interface {
-	// Ascend returns key-value pairs in a given range as an iterator. Values are
-	// iterated in lexical ascending order of the keys.
+	// Ascend returns key-value pairs of a range in ascending order through an
+	// iterator. Range is determined by the `begin` and `end` parameters.
+	//
+	// The `begin` parameter identifies the smaller side key and the `end`
+	// parameter identifies the larger side key. When they are both non-empty
+	// `begin` must be lesser than the `end` or os.ErrInvalid is returned.
 	//
 	// When both `begin` and `end` are non-empty, then range starts at the
-	// `begin` key included and stops before `end` key which is excluded.
+	// `begin` key (included) and stops before the `end` key (excluded).
 	//
-	// When both `begin` and `end` are empty, then all key-value entries are part
-	// of the range in the ascending order.
+	// When both `begin` and `end` are empty, then all key-value pairs are part
+	// of the range. They are returned in ascending order for `Ascend` and in
+	// descending order for `Descend`.
 	//
 	// When `begin` is empty then it represents the smallest key and when `end`
-	// is empty it represents the key *beyond* the largest key (so that the
-	// largest key is included).
+	// is empty it represents the key-after the largest key (so that the largest
+	// key is included in the range).
 	Ascend(ctx context.Context, begin, end string) (Iterator, error)
 
-	// Descend is semantically similar to Ascend, but iterates in lexical
+	// Descend is same as `Ascend`, but returns the determined range in
 	// descending order of the keys.
 	Descend(ctx context.Context, begin, end string) (Iterator, error)
 }

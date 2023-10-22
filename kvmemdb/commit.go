@@ -94,8 +94,8 @@ func Compact(ctx context.Context, db *DB) int {
 	}
 	db.mu.Unlock()
 
-	tx := db.NewTransaction()
-	defer tx.Close()
+	tx, _ := db.NewTransaction(ctx)
+	defer tx.Rollback(ctx)
 
 	count := 0
 	compact := func(key string, mval *multival.MultiValue) bool {

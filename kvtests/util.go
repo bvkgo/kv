@@ -28,5 +28,5 @@ func Clear(ctx context.Context, db kv.Database) error {
 		}
 		return nil
 	}
-	return db.WithTransaction(ctx, clear)
+	return kv.WithTransaction(ctx, db, clear)
 }

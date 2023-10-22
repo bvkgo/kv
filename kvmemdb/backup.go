@@ -4,6 +4,7 @@ package kvmemdb
 
 import (
 	"bufio"
+	"context"
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -44,8 +45,9 @@ func Backup(db *DB, file string) error {
 	bufp := bufio.NewWriter(fp)
 	encoder := gob.NewEncoder(bufp)
 
-	s := db.NewSnapshot()
-	defer s.Close()
+	snap, _ := db.NewSnapshot(context.Background())
+	s := snap.(*Snapshot)
+	defer s.Discard(context.Background())
 
 	db.mu.Lock()
 	header := gobHeader{

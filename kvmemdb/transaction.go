@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 
 	"github.com/bvkgo/kv"
@@ -38,6 +39,10 @@ func (t *Transaction) String() string {
 }
 
 func (t *Transaction) Get(ctx context.Context, key string) (io.Reader, error) {
+	if len(key) == 0 {
+		return nil, os.ErrInvalid
+	}
+
 	if v, ok := t.accesses[key]; ok {
 		if v.Deleted {
 			return nil, os.ErrNotExist
@@ -60,6 +65,10 @@ func (t *Transaction) Get(ctx context.Context, key string) (io.Reader, error) {
 }
 
 func (t *Transaction) Set(ctx context.Context, key string, value io.Reader) error {
+	if len(key) == 0 {
+		return os.ErrInvalid
+	}
+
 	data, err := io.ReadAll(value)
 	if err != nil {
 		return err
@@ -82,6 +91,10 @@ func (t *Transaction) Set(ctx context.Context, key string, value io.Reader) erro
 }
 
 func (t *Transaction) Delete(ctx context.Context, key string) error {
+	if len(key) == 0 {
+		return os.ErrInvalid
+	}
+
 	if v, ok := t.accesses[key]; ok {
 		// Do not modify the values that are not created by this transaction.
 		if v.Version == t.version {
@@ -99,21 +112,41 @@ func (t *Transaction) Delete(ctx context.Context, key string) error {
 }
 
 func (t *Transaction) Ascend(ctx context.Context, begin, end string) (kv.Iterator, error) {
+	if end != "" && begin > end {
+		return nil, os.ErrInvalid
+	}
 	keys := t.db.keys(t.accesses)
 	for k := range t.accesses {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	return newIterator(t.Get, keys, begin, end), nil
+	i, n := 0, len(keys)
+	if begin != "" {
+		i, _ = slices.BinarySearch(keys, begin)
+	}
+	if end != "" {
+		n, _ = slices.BinarySearch(keys, end)
+	}
+	return newIterator(t.Get, keys[i:n], false /* descending */), nil
 }
 
 func (t *Transaction) Descend(ctx context.Context, begin, end string) (kv.Iterator, error) {
+	if end != "" && begin > end {
+		return nil, os.ErrInvalid
+	}
 	keys := t.db.keys(t.accesses)
 	for k := range t.accesses {
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i] > keys[j] })
-	return newIterator(t.Get, keys, begin, end), nil
+	sort.Strings(keys)
+	i, n := 0, len(keys)
+	if begin != "" {
+		i, _ = slices.BinarySearch(keys, begin)
+	}
+	if end != "" {
+		n, _ = slices.BinarySearch(keys, end)
+	}
+	return newIterator(t.Get, keys[i:n], true /* descending */), nil
 }
 
 func (t *Transaction) Scan(ctx context.Context) (kv.Iterator, error) {
@@ -121,7 +154,7 @@ func (t *Transaction) Scan(ctx context.Context) (kv.Iterator, error) {
 	for k := range t.accesses {
 		keys = append(keys, k)
 	}
-	return newIterator(t.Get, keys, "", ""), nil
+	return newIterator(t.Get, keys, false /* descending */), nil
 }
 
 func (t *Transaction) Rollback(ctx context.Context) error {

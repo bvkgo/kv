@@ -3,23 +3,54 @@
 package kv
 
 import (
+	"context"
 	"io"
 )
 
-// Close is a helper function that invokes Close method on the Iterator or
-// Snapshot or a Transaction if such a method is defined; otherwise it is a
-// no-op.
+// Close is a helper function that invokes Close method on the input Iterator.
 //
-// Some implementations may require to release resources, so this helper
-// function can be used close an iterator.
-func Close(v any) error {
+// Some key-value store implementations may need to release resources, so this
+// generalized helper function can be used without access to concrete data type
+// of the underlying object.
+func Close(v Iterator) error {
 	if c, ok := v.(io.Closer); ok {
 		c.Close()
 		return nil
 	}
+
 	if c, ok := v.(interface{ Close() }); ok {
 		c.Close()
 		return nil
+	}
+	return nil
+}
+
+func WithSnapshot(ctx context.Context, db Database, f func(context.Context, Snapshot) error) error {
+	snap, err := db.NewSnapshot(ctx)
+	if err != nil {
+		return err
+	}
+	defer snap.Discard(ctx)
+
+	if err := f(ctx, snap); err != nil {
+		return err
+	}
+	return nil
+}
+
+func WithTransaction(ctx context.Context, db Database, f func(context.Context, Transaction) error) error {
+	tx, err := db.NewTransaction(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if err := f(ctx, tx); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return err
 	}
 	return nil
 }

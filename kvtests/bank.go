@@ -70,7 +70,7 @@ func (b *BankTest) initializeDB(ctx context.Context) error {
 		}
 		return nil
 	}
-	if err := b.DB.WithTransaction(ctx, initDB); err != nil {
+	if err := kv.WithTransaction(ctx, b.DB, initDB); err != nil {
 		return err
 	}
 	return nil
@@ -98,7 +98,7 @@ func (b *BankTest) FindTotalBalance(ctx context.Context) (int64, error) {
 		}
 		return nil
 	}
-	if err := b.DB.WithSnapshot(ctx, totalDB); err != nil {
+	if err := kv.WithSnapshot(ctx, b.DB, totalDB); err != nil {
 		return 0, err
 	}
 	return totalBalance, nil
@@ -201,7 +201,7 @@ func (b *BankTest) updateDB(ctx context.Context) error {
 		// log.Printf("%v: transferring %d from %s to %s", tx, amount, src.Key(), dst.Key())
 		return nil
 	}
-	return b.DB.WithTransaction(ctx, updateDB)
+	return kv.WithTransaction(ctx, b.DB, updateDB)
 }
 
 func (b *BankTest) verifyDB(ctx context.Context) error {
@@ -234,5 +234,5 @@ func (b *BankTest) verifyDB(ctx context.Context) error {
 		log.Printf("snapshot has %d balance in %d accounts", b.totalBalance, count)
 		return nil
 	}
-	return b.DB.WithSnapshot(ctx, verifyDB)
+	return kv.WithSnapshot(ctx, b.DB, verifyDB)
 }

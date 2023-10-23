@@ -16,6 +16,8 @@ import (
 type TemplateOp string
 
 var ops = []TemplateOp{
+	"ok",
+
 	"get",
 	"set",
 	"delete",
@@ -69,6 +71,7 @@ type TemplateStep struct {
 	Snapshot    string
 	Iterator    string
 
+	OK    string
 	Key   string
 	Value string
 
@@ -76,6 +79,8 @@ type TemplateStep struct {
 	End   string
 
 	Error string
+
+	prefixMap map[string]struct{}
 }
 
 // TemplateStepResult holds the result of a TemplateStep execution.
@@ -83,6 +88,7 @@ type TemplateStepResult struct {
 	Step   *TemplateStep
 	Status error
 
+	OK    bool
 	Key   string
 	Value io.Reader
 
@@ -93,7 +99,9 @@ type TemplateStepResult struct {
 
 // ParseTemplateStep parses input string into a database command.
 func ParseTemplateStep(s string) (*TemplateStep, error) {
-	step := new(TemplateStep)
+	step := &TemplateStep{
+		prefixMap: make(map[string]struct{}),
+	}
 	words := strings.Fields(strings.TrimSpace(s))
 	for i, word := range words {
 		if strings.HasPrefix(word, "#") {
@@ -104,24 +112,47 @@ func ParseTemplateStep(s string) (*TemplateStep, error) {
 		switch {
 		case strings.HasPrefix(word, "db:"):
 			step.Database = strings.TrimPrefix(word, "db:")
+			step.prefixMap["db"] = struct{}{}
+
 		case strings.HasPrefix(word, "tx:"):
 			step.Transaction = strings.TrimPrefix(word, "tx:")
+			step.prefixMap["tx"] = struct{}{}
+
 		case strings.HasPrefix(word, "snap:"):
 			step.Snapshot = strings.TrimPrefix(word, "snap:")
+			step.prefixMap["snap"] = struct{}{}
+
 		case strings.HasPrefix(word, "it:"):
 			step.Iterator = strings.TrimPrefix(word, "it:")
+			step.prefixMap["it"] = struct{}{}
+
 		case strings.HasPrefix(word, "key:"):
 			step.Key = strings.TrimPrefix(word, "key:")
+			step.prefixMap["key"] = struct{}{}
+
 		case strings.HasPrefix(word, "value:"):
 			step.Value = strings.TrimPrefix(word, "value:")
+			step.prefixMap["value"] = struct{}{}
+
+		case strings.HasPrefix(word, "ok:"):
+			step.OK = strings.TrimPrefix(word, "ok:")
+			step.prefixMap["ok"] = struct{}{}
+
 		case strings.HasPrefix(word, "error:"):
 			step.Error = strings.TrimPrefix(word, "error:")
+			step.prefixMap["error"] = struct{}{}
+
 		case strings.HasPrefix(word, "begin:"):
 			step.Begin = strings.TrimPrefix(word, "begin:")
+			step.prefixMap["begin"] = struct{}{}
+
 		case strings.HasPrefix(word, "end:"):
 			step.End = strings.TrimPrefix(word, "end:")
+			step.prefixMap["end"] = struct{}{}
+
 		case word == "=>":
 			continue
+
 		default:
 			if !slices.Contains(ops, TemplateOp(strings.ToLower(word))) {
 				return nil, fmt.Errorf("invalid/unrecognized op %q", word)
@@ -201,8 +232,26 @@ func (s *TemplateStep) check() error {
 	return nil
 }
 
+func (s *TemplateStep) checkOK(r *TemplateStepResult) error {
+	if s.Op != "current" && s.Op != "next" {
+		return nil
+	}
+	if _, ok := s.prefixMap["ok"]; !ok {
+		return nil
+	}
+	if s.OK == "true" && !r.OK {
+		return fmt.Errorf("step %v: want %q got %b", s, s.OK, r.OK)
+	} else if s.OK == "false" && r.OK {
+		return fmt.Errorf("step %v: want %q got %b", s, s.OK, r.OK)
+	}
+	return nil
+}
+
 func (s *TemplateStep) checkKey(r *TemplateStepResult) error {
 	if s.Op != "current" && s.Op != "next" {
+		return nil
+	}
+	if _, ok := s.prefixMap["key"]; !ok {
 		return nil
 	}
 	if r.Key != s.Key {
@@ -213,6 +262,9 @@ func (s *TemplateStep) checkKey(r *TemplateStepResult) error {
 
 func (s *TemplateStep) checkValue(r *TemplateStepResult) error {
 	if s.Op != "get" && s.Op != "current" && s.Op != "next" {
+		return nil
+	}
+	if _, ok := s.prefixMap["value"]; !ok {
 		return nil
 	}
 	var str string

@@ -150,18 +150,16 @@ func (rt *TemplateRuntime) RunStep(ctx context.Context, s *TemplateStep) (*Templ
 
 	case "current":
 		iter := rt.itMap[s.Iterator]
-		if k, v, ok := iter.Current(ctx); ok {
-			result.Key, result.Value, result.Status = k, v, nil
-		} else {
-			result.Key, result.Value, result.Status = k, v, iter.Err()
+		result.Key, result.Value, result.OK = iter.Current(ctx)
+		if !result.OK {
+			result.Status = iter.Err()
 		}
 
 	case "next":
 		iter := rt.itMap[s.Iterator]
-		if k, v, ok := iter.Next(ctx); ok {
-			result.Key, result.Value, result.Status = k, v, nil
-		} else {
-			result.Key, result.Value, result.Status = k, v, iter.Err()
+		result.Key, result.Value, result.OK = iter.Next(ctx)
+		if !result.OK {
+			result.Status = iter.Err()
 		}
 
 	case "new-transaction":
@@ -200,6 +198,10 @@ func (rt *TemplateRuntime) RunStep(ctx context.Context, s *TemplateStep) (*Templ
 	}
 
 	if err := s.checkStatus(result); err != nil {
+		return nil, err
+	}
+
+	if err := s.checkOK(result); err != nil {
 		return nil, err
 	}
 	if err := s.checkKey(result); err != nil {

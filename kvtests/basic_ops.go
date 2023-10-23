@@ -18,6 +18,20 @@ var BasicOpsTemplateMap = map[string]string{
   tx:tx1  commit
 `,
 
+	"ScanKeys": `
+  db:db1  new-transaction       => tx:tx1
+  tx:tx1  set key:0 value:zero
+  tx:tx1  set key:1 value:one
+  tx:tx1  set key:2 value:two
+
+  tx:tx1  scan                  => it:it1
+  it:it1  current               => ok:true
+  it:it1  next                  => ok:true
+  it:it1  next                  => ok:true
+  it:it1  next                  => ok:false error:nil
+  tx:tx1  rollback
+`,
+
 	"AscendDescendScanEmpty": `
   db:db1  new-transaction       => tx:tx1
 

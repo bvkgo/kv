@@ -2,21 +2,8 @@
 
 package kvtests
 
-import (
-	"context"
-
-	"github.com/bvkgo/kv"
-	"github.com/bvkgo/kv/kvtests/internal"
-)
-
-func RunTemplate(ctx context.Context, template string, db ...kv.Database) error {
-	if _, err := internal.RunTemplateTest(ctx, template, db...); err != nil {
-		return err
-	}
-	return nil
-}
-
-const TxGetSetDelete = `
+var BasicOpsTemplateMap = map[string]string{
+	"GetSetDelete": `
   db:db1  new-transaction       => tx:tx1
 
   tx:tx1  delete key:0          => error:nil|ErrNotExist
@@ -29,9 +16,9 @@ const TxGetSetDelete = `
   tx:tx1  get key:0             => error:ErrNotExist
 
   tx:tx1  commit
-`
+`,
 
-const TxAscendDescendScanEmpty = `
+	"AscendDescendScanEmpty": `
   db:db1  new-transaction       => tx:tx1
 
   tx:tx1  ascend begin: end:    => it:it1
@@ -47,9 +34,9 @@ const TxAscendDescendScanEmpty = `
   it:it3  next                  => key: value: error:nil
 
   tx:tx1  commit
-`
+`,
 
-const TxAscendDescendInvalid = `
+	"AscendDescendInvalid": `
   db:db1  new-transaction       => tx:tx1
 
   tx:tx1  set key:0 value:zero
@@ -66,9 +53,9 @@ const TxAscendDescendInvalid = `
   tx:tx1  descend begin:1 end:0   => error:ErrInvalid
 
   tx:tx1  rollback
-`
+`,
 
-const TxAscendEmpty = `
+	"AscendEmpty": `
   db:db1  new-transaction       => tx:tx1
 
   tx:tx1  set key:0 value:zero
@@ -88,9 +75,9 @@ const TxAscendEmpty = `
   it:it3  next                  => key: value: error:nil
 
   tx:tx1  rollback
-`
+`,
 
-const TxDescendEmpty = `
+	"DescendEmpty": `
   db:db1  new-transaction         => tx:tx1
 
   tx:tx1  set key:0 value:zero
@@ -110,9 +97,9 @@ const TxDescendEmpty = `
   it:it3  next                   => key: value: error:nil
 
   tx:tx1  rollback
-`
+`,
 
-const TxAscendNonEmptyRange = `
+	"AscendNonEmptyRange": `
   db:db1  new-transaction         => tx:tx1
 
   tx:tx1  set key:0 value:zero
@@ -153,9 +140,9 @@ const TxAscendNonEmptyRange = `
   it:it6  next                    => key: value: error:nil
 
   tx:tx1  rollback
-`
+`,
 
-const TxDescendNonEmptyRange = `
+	"DescendNonEmptyRange": `
   db:db1  new-transaction         => tx:tx1
 
   tx:tx1  set key:0 value:zero
@@ -196,9 +183,9 @@ const TxDescendNonEmptyRange = `
   it:it6  next                     => key: value: error:nil
 
   tx:tx1  rollback
-`
+`,
 
-const TxAscendOneEmptyRange = `
+	"AscendOneEmptyRange": `
   db:db1  new-transaction         => tx:tx1
 
   tx:tx1  set key:0 value:zero
@@ -242,9 +229,9 @@ const TxAscendOneEmptyRange = `
   it:it4  next                    => key: value: error:nil
 
   tx:tx1  rollback
-`
+`,
 
-const TxDescendOneEmptyRange = `
+	"DescendOneEmptyRange": `
   db:db1  new-transaction         => tx:tx1
 
   tx:tx1  set key:0 value:zero
@@ -288,4 +275,5 @@ const TxDescendOneEmptyRange = `
   it:it4  next                    => key: value: error:nil
 
   tx:tx1  rollback
-`
+`,
+}

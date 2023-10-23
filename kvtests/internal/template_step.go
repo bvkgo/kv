@@ -3,7 +3,6 @@
 package internal
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -260,103 +259,4 @@ func (s *TemplateStep) checkStatus(r *TemplateStepResult) error {
 		return nil
 	}
 	return fmt.Errorf("step %v: want %q, got %v", s, s.Error, r.Status)
-}
-
-// Run executes the database command on a user DB.
-func (s *TemplateStep) Run(ctx context.Context, db kv.Database, tx kv.Transaction, snap kv.Snapshot, iter kv.Iterator) (*TemplateStepResult, error) {
-	result := &TemplateStepResult{
-		Step: s,
-	}
-
-	switch s.Op {
-	default:
-		return nil, fmt.Errorf("invalid/unrecognized op %q", s.Op)
-
-	case "get":
-		if len(s.Transaction) != 0 {
-			result.Value, result.Status = tx.Get(ctx, s.Key)
-		}
-		if len(s.Snapshot) != 0 {
-			result.Value, result.Status = snap.Get(ctx, s.Key)
-		}
-
-	case "set":
-		result.Status = tx.Set(ctx, s.Key, strings.NewReader(s.Value))
-	case "delete":
-		result.Status = tx.Delete(ctx, s.Key)
-
-	case "ascend":
-		if len(s.Transaction) != 0 {
-			result.Iterator, result.Status = tx.Ascend(ctx, s.Begin, s.End)
-			break
-		}
-		if len(s.Snapshot) != 0 {
-			result.Iterator, result.Status = snap.Ascend(ctx, s.Begin, s.End)
-			break
-		}
-		return nil, fmt.Errorf("%q has no tx or snap name", s.Op)
-
-	case "descend":
-		if len(s.Transaction) != 0 {
-			result.Iterator, result.Status = tx.Descend(ctx, s.Begin, s.End)
-			break
-		}
-		if len(s.Snapshot) != 0 {
-			result.Iterator, result.Status = snap.Descend(ctx, s.Begin, s.End)
-			break
-		}
-		return nil, fmt.Errorf("%q has no tx or snap name", s.Op)
-
-	case "scan":
-		if len(s.Transaction) != 0 {
-			result.Iterator, result.Status = tx.Scan(ctx)
-			break
-		}
-		if len(s.Snapshot) != 0 {
-			result.Iterator, result.Status = snap.Scan(ctx)
-			break
-		}
-		return nil, fmt.Errorf("%q has no tx or snap name", s.Op)
-
-	case "current":
-		if k, v, ok := iter.Current(ctx); ok {
-			result.Key, result.Value, result.Status = k, v, nil
-		} else {
-			result.Key, result.Value, result.Status = k, v, iter.Err()
-		}
-
-	case "next":
-		if k, v, ok := iter.Next(ctx); ok {
-			result.Key, result.Value, result.Status = k, v, nil
-		} else {
-			result.Key, result.Value, result.Status = k, v, iter.Err()
-		}
-
-	case "new-transaction":
-		result.Transaction, result.Status = db.NewTransaction(ctx)
-
-	case "commit":
-		result.Status = tx.Commit(ctx)
-
-	case "rollback":
-		result.Status = tx.Rollback(ctx)
-
-	case "new-snapshot":
-		result.Snapshot, result.Status = db.NewSnapshot(ctx)
-
-	case "discard":
-		result.Status = snap.Discard(ctx)
-	}
-
-	if err := s.checkStatus(result); err != nil {
-		return nil, err
-	}
-	if err := s.checkKey(result); err != nil {
-		return nil, err
-	}
-	if err := s.checkValue(result); err != nil {
-		return nil, err
-	}
-
-	return result, nil
 }

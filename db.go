@@ -4,22 +4,31 @@ package kv
 
 import "context"
 
-type Snapshot interface {
+type Reader interface {
 	Getter
 	Ranger
 	Scanner
+}
+
+type Writer interface {
+	Setter
+	Deleter
+}
+
+type ReadWriter interface {
+	Reader
+	Writer
+}
+
+type Snapshot interface {
+	Reader
 
 	Discard(ctx context.Context) error
 }
 
 // Transaction represents a read-write transaction.
 type Transaction interface {
-	Getter
-	Ranger
-	Scanner
-
-	Setter
-	Deleter
+	ReadWriter
 
 	// Rollback cancels a transaction without checking for conflicts. Returns nil
 	// on success.

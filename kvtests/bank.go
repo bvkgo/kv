@@ -57,20 +57,20 @@ func (b *BankTest) initializeDB(ctx context.Context) error {
 
 	// Initialize the database.
 	b.totalBalance = int64(0)
-	initDB := func(ctx context.Context, tx kv.Transaction) error {
+	initDB := func(ctx context.Context, rw kv.ReadWriter) error {
 		for i := 0; i < b.numAccounts; i++ {
 			a := &internal.Account{
 				ID:      i,
 				Balance: b.minBalance + int64(rand.Int31n(math.MaxInt32)),
 			}
-			if err := a.Save(ctx, tx); err != nil {
+			if err := a.Save(ctx, rw); err != nil {
 				return err
 			}
 			b.totalBalance += a.Balance
 		}
 		return nil
 	}
-	if err := kv.WithTransaction(ctx, b.DB, initDB); err != nil {
+	if err := kv.WithReadWriter(ctx, b.DB, initDB); err != nil {
 		return err
 	}
 	return nil
@@ -78,8 +78,8 @@ func (b *BankTest) initializeDB(ctx context.Context) error {
 
 func (b *BankTest) FindTotalBalance(ctx context.Context) (int64, error) {
 	var totalBalance int64
-	totalDB := func(ctx context.Context, s kv.Snapshot) error {
-		it, err := s.Scan(ctx)
+	totalDB := func(ctx context.Context, r kv.Reader) error {
+		it, err := r.Scan(ctx)
 		if err != nil {
 			return err
 		}
@@ -98,7 +98,7 @@ func (b *BankTest) FindTotalBalance(ctx context.Context) (int64, error) {
 		}
 		return nil
 	}
-	if err := kv.WithSnapshot(ctx, b.DB, totalDB); err != nil {
+	if err := kv.WithReader(ctx, b.DB, totalDB); err != nil {
 		return 0, err
 	}
 	return totalBalance, nil
@@ -146,9 +146,9 @@ func (b *BankTest) Run(ctx context.Context, nclients int) error {
 }
 
 func (b *BankTest) updateDB(ctx context.Context) error {
-	updateDB := func(ctx context.Context, tx kv.Transaction) error {
+	updateDB := func(ctx context.Context, rw kv.ReadWriter) error {
 		src := &internal.Account{ID: rand.Intn(b.numAccounts)}
-		if err := src.Reload(ctx, tx); err != nil {
+		if err := src.Reload(ctx, rw); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				return nil
 			}
@@ -156,7 +156,7 @@ func (b *BankTest) updateDB(ctx context.Context) error {
 		}
 
 		dst := &internal.Account{ID: rand.Intn(b.numAccounts)}
-		if err := dst.Reload(ctx, tx); err != nil {
+		if err := dst.Reload(ctx, rw); err != nil {
 			if !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
@@ -185,28 +185,28 @@ func (b *BankTest) updateDB(ctx context.Context) error {
 		dst.Balance += amount
 
 		if src.Balance == 0 {
-			if err := tx.Delete(ctx, src.Key()); err != nil {
+			if err := rw.Delete(ctx, src.Key()); err != nil {
 				return err
 			}
 		} else {
-			if err := src.Save(ctx, tx); err != nil {
+			if err := src.Save(ctx, rw); err != nil {
 				return err
 			}
 		}
 
-		if err := dst.Save(ctx, tx); err != nil {
+		if err := dst.Save(ctx, rw); err != nil {
 			return err
 		}
 
 		// log.Printf("%v: transferring %d from %s to %s", tx, amount, src.Key(), dst.Key())
 		return nil
 	}
-	return kv.WithTransaction(ctx, b.DB, updateDB)
+	return kv.WithReadWriter(ctx, b.DB, updateDB)
 }
 
 func (b *BankTest) verifyDB(ctx context.Context) error {
-	verifyDB := func(ctx context.Context, s kv.Snapshot) error {
-		it, err := s.Scan(ctx)
+	verifyDB := func(ctx context.Context, r kv.Reader) error {
+		it, err := r.Scan(ctx)
 		if err != nil {
 			return err
 		}
@@ -234,5 +234,5 @@ func (b *BankTest) verifyDB(ctx context.Context) error {
 		log.Printf("snapshot has %d balance in %d accounts", b.totalBalance, count)
 		return nil
 	}
-	return kv.WithSnapshot(ctx, b.DB, verifyDB)
+	return kv.WithReader(ctx, b.DB, verifyDB)
 }

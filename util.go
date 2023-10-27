@@ -25,8 +25,8 @@ func Close(v Iterator) error {
 	return nil
 }
 
-// WithSnapshot runs the input function with a temporary snapshot.
-func WithSnapshot(ctx context.Context, db Database, f func(context.Context, Snapshot) error) error {
+// WithReader runs the input function under a temporary snapshot.
+func WithReader(ctx context.Context, db Database, f func(context.Context, Reader) error) error {
 	snap, err := db.NewSnapshot(ctx)
 	if err != nil {
 		return err
@@ -39,10 +39,10 @@ func WithSnapshot(ctx context.Context, db Database, f func(context.Context, Snap
 	return nil
 }
 
-// WithTransaction runs the input function with a read-write
+// WithReadWriter runs the input function under a temporary
 // transaction. Transaction is committed if the input function returns nil or
 // rollback-ed otherwise.
-func WithTransaction(ctx context.Context, db Database, f func(context.Context, Transaction) error) error {
+func WithReadWriter(ctx context.Context, db Database, f func(context.Context, ReadWriter) error) error {
 	tx, err := db.NewTransaction(ctx)
 	if err != nil {
 		return err

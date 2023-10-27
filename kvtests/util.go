@@ -10,15 +10,15 @@ import (
 
 // ClearDatabase deletes all key-value pairs in the database.
 func Clear(ctx context.Context, db kv.Database) error {
-	clear := func(ctx context.Context, tx kv.Transaction) error {
-		it, err := tx.Scan(ctx)
+	clear := func(ctx context.Context, rw kv.ReadWriter) error {
+		it, err := rw.Scan(ctx)
 		if err != nil {
 			return err
 		}
 		defer kv.Close(it)
 
 		for k, _, ok := it.Current(ctx); ok; k, _, ok = it.Next(ctx) {
-			if err := tx.Delete(ctx, k); err != nil {
+			if err := rw.Delete(ctx, k); err != nil {
 				return err
 			}
 		}
@@ -28,5 +28,5 @@ func Clear(ctx context.Context, db kv.Database) error {
 		}
 		return nil
 	}
-	return kv.WithTransaction(ctx, db, clear)
+	return kv.WithReadWriter(ctx, db, clear)
 }

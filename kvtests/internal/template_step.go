@@ -240,9 +240,9 @@ func (s *TemplateStep) checkOK(r *TemplateStepResult) error {
 		return nil
 	}
 	if s.OK == "true" && !r.OK {
-		return fmt.Errorf("step %v: want %q got %b", s, s.OK, r.OK)
+		return fmt.Errorf("step %v: want %q got %t", s, s.OK, r.OK)
 	} else if s.OK == "false" && r.OK {
-		return fmt.Errorf("step %v: want %q got %b", s, s.OK, r.OK)
+		return fmt.Errorf("step %v: want %q got %t", s, s.OK, r.OK)
 	}
 	return nil
 }

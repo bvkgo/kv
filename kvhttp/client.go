@@ -223,7 +223,7 @@ func (tx *Tx) Rollback(ctx context.Context) error {
 }
 
 func (snap *Snap) Get(ctx context.Context, key string) (io.Reader, error) {
-	req := &api.GetRequest{Transaction: snap.id, Key: key}
+	req := &api.GetRequest{Snapshot: snap.id, Key: key}
 	resp, err := doPost[api.GetResponse](ctx, snap.db, "/snap/get", req)
 	if err != nil {
 		return nil, err
@@ -236,10 +236,10 @@ func (snap *Snap) Get(ctx context.Context, key string) (io.Reader, error) {
 
 func (snap *Snap) Ascend(ctx context.Context, begin, end string) (kv.Iterator, error) {
 	req := &api.AscendRequest{
-		Transaction: snap.id,
-		Name:        uuid.New().String(),
-		Begin:       begin,
-		End:         end,
+		Snapshot: snap.id,
+		Name:     uuid.New().String(),
+		Begin:    begin,
+		End:      end,
 	}
 	resp, err := doPost[api.AscendResponse](ctx, snap.db, "/snap/ascend", req)
 	if err != nil {
@@ -257,10 +257,10 @@ func (snap *Snap) Ascend(ctx context.Context, begin, end string) (kv.Iterator, e
 
 func (snap *Snap) Descend(ctx context.Context, begin, end string) (kv.Iterator, error) {
 	req := &api.DescendRequest{
-		Transaction: snap.id,
-		Name:        uuid.New().String(),
-		Begin:       begin,
-		End:         end,
+		Snapshot: snap.id,
+		Name:     uuid.New().String(),
+		Begin:    begin,
+		End:      end,
 	}
 	resp, err := doPost[api.DescendResponse](ctx, snap.db, "/snap/descend", req)
 	if err != nil {
@@ -277,7 +277,7 @@ func (snap *Snap) Descend(ctx context.Context, begin, end string) (kv.Iterator, 
 }
 
 func (snap *Snap) Scan(ctx context.Context) (kv.Iterator, error) {
-	req := &api.ScanRequest{Transaction: snap.id, Name: uuid.New().String()}
+	req := &api.ScanRequest{Snapshot: snap.id, Name: uuid.New().String()}
 	resp, err := doPost[api.ScanResponse](ctx, snap.db, "/snap/scan", req)
 	if err != nil {
 		return nil, err

@@ -94,32 +94,18 @@ type ScanResponse struct {
 	Error string
 }
 
-type CurrentRequest struct {
+type FetchRequest struct {
 	Iterator string
+
+	Advance bool
 }
 
-type CurrentResponse struct {
+type FetchResponse struct {
+	Error string
+
 	Key string
 
 	Value []byte
-
-	OK bool
-
-	Error string
-}
-
-type NextRequest struct {
-	Iterator string
-}
-
-type NextResponse struct {
-	Key string
-
-	Value []byte
-
-	OK bool
-
-	Error string
 }
 
 type CommitRequest struct {

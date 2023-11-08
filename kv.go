@@ -42,7 +42,7 @@ type Deleter interface {
 //	}
 //	defer kv.Close(it)
 //
-//	for k, v, ok := it.Current(ctx); ok; k, v, ok = it.Next(ctx) {
+//	for k, v, err := it.Fetch(ctx, true); err == nil; k, v, err = it.Fetch(ctx, true) {
 //	  ...
 //	  if ... {
 //	    break
@@ -50,31 +50,17 @@ type Deleter interface {
 //	  ...
 //	}
 //
-//	if err := it.Err(); err != nil {
+//	if _, _, err := it.Fetch(ctx, false); err != nil && !errors.Is(err, io.EOF) {
 //	  return err
 //	}
 type Iterator interface {
-	// Err returns any error recorded in the iterator.
+	// Fetch returns the key, value pair at current iterator position. If advance
+	// parameter is true, iterator position is advanced to the next
+	// element. Returns io.EOF when the iterator reaches to the end.
 	//
-	// Reading from the database could encounter IO errors at any position,
-	// including the initial position.
-	//
-	// Returns nil when iteration has reached the end of range with no errors.
-	Err() error
-
-	// Current returns the key-value pair at the current position of the
-	// iterator. It does not change the current position of the iterator.
-	//
-	// Initial value is fetched from the database when an Iterator is created so,
-	// Current can be used immediately after creating the Iterator.
-	//
-	// Returns the key-value pair and true on success. Returns a false when end
-	// of range is reached or on encountering any failure.
-	Current(context.Context) (string, io.Reader, bool)
-
-	// Next advances the iterator to next position and returns the key-value pair
-	// at that position.
-	Next(context.Context) (string, io.Reader, bool)
+	// Returns a non-nil error if iterator encounters any failures and the same
+	// error is repeated for all further calls.
+	Fetch(ctx context.Context, advance bool) (string, io.Reader, error)
 }
 
 type Ranger interface {

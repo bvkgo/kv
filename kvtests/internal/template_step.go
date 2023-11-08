@@ -26,8 +26,7 @@ var ops = []TemplateOp{
 	"descend",
 	"scan",
 
-	"current",
-	"next",
+	"fetch",
 
 	"new-transaction",
 	"commit",
@@ -55,8 +54,7 @@ var ops = []TemplateOp{
 //
 // tx:%s ascend begin:%s end:%s    => nil it:%s
 //
-// it:%s current => key:%s value:%s
-// it:%s next
+// it:%s fetch advance:true      => key:%s value:%s error:%s
 //
 // Database commands above are parsed and validated into an object which can
 // be used to run the command on a user database.
@@ -71,9 +69,9 @@ type TemplateStep struct {
 	Snapshot    string
 	Iterator    string
 
-	OK    string
-	Key   string
-	Value string
+	Key     string
+	Value   string
+	Advance bool
 
 	Begin string
 	End   string
@@ -88,7 +86,6 @@ type TemplateStepResult struct {
 	Step   *TemplateStep
 	Status error
 
-	OK    bool
 	Key   string
 	Value io.Reader
 
@@ -134,9 +131,15 @@ func ParseTemplateStep(s string) (*TemplateStep, error) {
 			step.Value = strings.TrimPrefix(word, "value:")
 			step.prefixMap["value"] = struct{}{}
 
-		case strings.HasPrefix(word, "ok:"):
-			step.OK = strings.TrimPrefix(word, "ok:")
-			step.prefixMap["ok"] = struct{}{}
+		case strings.HasPrefix(word, "advance:"):
+			if v := strings.TrimPrefix(word, "advance:"); v == "true" {
+				step.Advance = true
+			} else if v == "false" {
+				step.Advance = false
+			} else {
+				return nil, fmt.Errorf("fetch op's advance value must be `true` or `false`")
+			}
+			step.prefixMap["advance"] = struct{}{}
 
 		case strings.HasPrefix(word, "error:"):
 			step.Error = strings.TrimPrefix(word, "error:")
@@ -207,7 +210,7 @@ func (s *TemplateStep) check() error {
 			return fmt.Errorf("scan needs an iterator name")
 		}
 
-	case "current", "next":
+	case "fetch":
 		if s.Iterator == "" {
 			return fmt.Errorf("%q needs an iterator name", s.Op)
 		}
@@ -232,23 +235,8 @@ func (s *TemplateStep) check() error {
 	return nil
 }
 
-func (s *TemplateStep) checkOK(r *TemplateStepResult) error {
-	if s.Op != "current" && s.Op != "next" {
-		return nil
-	}
-	if _, ok := s.prefixMap["ok"]; !ok {
-		return nil
-	}
-	if s.OK == "true" && !r.OK {
-		return fmt.Errorf("step %v: want %q got %t", s, s.OK, r.OK)
-	} else if s.OK == "false" && r.OK {
-		return fmt.Errorf("step %v: want %q got %t", s, s.OK, r.OK)
-	}
-	return nil
-}
-
 func (s *TemplateStep) checkKey(r *TemplateStepResult) error {
-	if s.Op != "current" && s.Op != "next" {
+	if s.Op != "fetch" {
 		return nil
 	}
 	if _, ok := s.prefixMap["key"]; !ok {
@@ -261,7 +249,7 @@ func (s *TemplateStep) checkKey(r *TemplateStepResult) error {
 }
 
 func (s *TemplateStep) checkValue(r *TemplateStepResult) error {
-	if s.Op != "get" && s.Op != "current" && s.Op != "next" {
+	if s.Op != "get" && s.Op != "fetch" {
 		return nil
 	}
 	if _, ok := s.prefixMap["value"]; !ok {
@@ -296,6 +284,11 @@ func (s *TemplateStep) checkStatus(r *TemplateStepResult) error {
 		return fmt.Errorf("step %v: want nil, got %v", s, r.Status)
 	}
 
+	if errors.Is(r.Status, io.EOF) {
+		if slices.Contains(errs, "EOF") {
+			return nil
+		}
+	}
 	if errors.Is(r.Status, os.ErrNotExist) {
 		if slices.Contains(errs, "ErrNotExist") {
 			return nil

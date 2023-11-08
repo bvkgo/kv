@@ -14,7 +14,7 @@ type Iterator struct {
 
 	keys []string
 
-	i, n, incr int
+	i, incr int
 }
 
 func newIterator(getter itGetter, keys []string, descending bool) *Iterator {
@@ -22,39 +22,32 @@ func newIterator(getter itGetter, keys []string, descending bool) *Iterator {
 		getter: getter,
 		keys:   keys,
 		i:      0,
-		n:      len(keys),
 		incr:   1,
 	}
 	if descending {
 		it.i = len(keys) - 1
-		it.n = -1
 		it.incr = -1
 	}
 	return it
 }
 
-func (it *Iterator) Err() error {
-	return nil
-}
-
-func (it *Iterator) Current(ctx context.Context) (string, io.Reader, bool) {
+func (it *Iterator) Fetch(ctx context.Context, advance bool) (string, io.Reader, error) {
 	stop := func() bool {
 		if it.incr > 0 {
-			return it.i < it.n
+			return it.i < len(it.keys)
 		}
-		return it.i > it.n
+		return it.i >= 0
 	}
-	// Skip over the keys returning os.ErrNotExist error.
+
 	for ; stop(); it.i += it.incr {
 		key := it.keys[it.i]
 		if value, err := it.getter(ctx, key); err == nil {
-			return key, value, true
+			if advance {
+				it.i += it.incr
+			}
+			return key, value, nil
 		}
 	}
-	return "", nil, false
-}
 
-func (it *Iterator) Next(ctx context.Context) (string, io.Reader, bool) {
-	it.i += it.incr
-	return it.Current(ctx)
+	return "", nil, io.EOF
 }

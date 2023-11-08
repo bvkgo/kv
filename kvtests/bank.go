@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"math/rand"
@@ -85,7 +86,7 @@ func (b *BankTest) FindTotalBalance(ctx context.Context) (int64, error) {
 		}
 		defer kv.Close(it)
 
-		for k, v, ok := it.Current(ctx); ok; k, v, ok = it.Next(ctx) {
+		for k, v, err := it.Fetch(ctx, true); err == nil; k, v, err = it.Fetch(ctx, true) {
 			a, err := internal.LoadAccount(k, v)
 			if err != nil {
 				return err
@@ -93,7 +94,7 @@ func (b *BankTest) FindTotalBalance(ctx context.Context) (int64, error) {
 			totalBalance += a.Balance
 		}
 
-		if err := it.Err(); err != nil {
+		if _, _, err := it.Fetch(ctx, false); err != nil && !errors.Is(err, io.EOF) {
 			return err
 		}
 		return nil
@@ -214,7 +215,8 @@ func (b *BankTest) verifyDB(ctx context.Context) error {
 
 		count := 0
 		total := int64(0)
-		for k, v, ok := it.Current(ctx); ok; k, v, ok = it.Next(ctx) {
+
+		for k, v, err := it.Fetch(ctx, true); err == nil; k, v, err = it.Fetch(ctx, true) {
 			a, err := internal.LoadAccount(k, v)
 			if err != nil {
 				return err
@@ -223,7 +225,7 @@ func (b *BankTest) verifyDB(ctx context.Context) error {
 			count++
 		}
 
-		if err := it.Err(); err != nil {
+		if _, _, err := it.Fetch(ctx, false); err != nil && !errors.Is(err, io.EOF) {
 			return err
 		}
 

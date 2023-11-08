@@ -148,19 +148,9 @@ func (rt *TemplateRuntime) RunStep(ctx context.Context, s *TemplateStep) (*Templ
 		}
 		return nil, fmt.Errorf("%q has no tx or snap name", s.Op)
 
-	case "current":
+	case "fetch":
 		iter := rt.itMap[s.Iterator]
-		result.Key, result.Value, result.OK = iter.Current(ctx)
-		if !result.OK {
-			result.Status = iter.Err()
-		}
-
-	case "next":
-		iter := rt.itMap[s.Iterator]
-		result.Key, result.Value, result.OK = iter.Next(ctx)
-		if !result.OK {
-			result.Status = iter.Err()
-		}
+		result.Key, result.Value, result.Status = iter.Fetch(ctx, s.Advance)
 
 	case "new-transaction":
 		db := rt.dbMap[s.Database]
@@ -201,9 +191,6 @@ func (rt *TemplateRuntime) RunStep(ctx context.Context, s *TemplateStep) (*Templ
 		return nil, err
 	}
 
-	if err := s.checkOK(result); err != nil {
-		return nil, err
-	}
 	if err := s.checkKey(result); err != nil {
 		return nil, err
 	}

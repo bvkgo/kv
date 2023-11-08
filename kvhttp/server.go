@@ -76,8 +76,7 @@ func Handler(db kv.Database) http.Handler {
 	s.mux.Handle("/snap/scan", httpPostJSONHandler(s.scan))
 	s.mux.Handle("/snap/discard", httpPostJSONHandler(s.discard))
 
-	s.mux.Handle("/it/current", httpPostJSONHandler(s.current))
-	s.mux.Handle("/it/next", httpPostJSONHandler(s.next))
+	s.mux.Handle("/it/fetch", httpPostJSONHandler(s.fetch))
 	return s.mux
 }
 
@@ -528,7 +527,7 @@ func (s *server) scan(ctx context.Context, u *url.URL, req *api.ScanRequest) (*a
 	return &api.ScanResponse{}, nil
 }
 
-func (s *server) current(ctx context.Context, u *url.URL, req *api.CurrentRequest) (*api.CurrentResponse, error) {
+func (s *server) fetch(ctx context.Context, u *url.URL, req *api.FetchRequest) (*api.FetchResponse, error) {
 	id, ok := s.LockExisting(req.Iterator)
 	if !ok {
 		return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
@@ -539,41 +538,13 @@ func (s *server) current(ctx context.Context, u *url.URL, req *api.CurrentReques
 	if !ok {
 		return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 	}
-	k, v, ok := it.Current(ctx)
-	if ok {
+	k, v, err := it.Fetch(ctx, req.Advance)
+	if err == nil {
 		data, err := io.ReadAll(v)
 		if err != nil {
 			return nil, err
 		}
-		return &api.CurrentResponse{Key: k, Value: data, OK: true}, nil
+		return &api.FetchResponse{Key: k, Value: data}, nil
 	}
-	if err := it.Err(); err != nil {
-		return &api.CurrentResponse{Error: error2string(err)}, nil
-	}
-	return &api.CurrentResponse{}, nil // EOF
-}
-
-func (s *server) next(ctx context.Context, u *url.URL, req *api.NextRequest) (*api.NextResponse, error) {
-	id, ok := s.LockExisting(req.Iterator)
-	if !ok {
-		return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
-	}
-	defer s.Unlock(req.Iterator, false /* delete */)
-
-	it, ok := s.itMap[id]
-	if !ok {
-		return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
-	}
-	k, v, ok := it.Next(ctx)
-	if ok {
-		data, err := io.ReadAll(v)
-		if err != nil {
-			return nil, err
-		}
-		return &api.NextResponse{Key: k, Value: data, OK: true}, nil
-	}
-	if err := it.Err(); err != nil {
-		return &api.NextResponse{Error: error2string(err)}, nil
-	}
-	return &api.NextResponse{}, nil // EOF
+	return &api.FetchResponse{Error: error2string(err)}, nil
 }

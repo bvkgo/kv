@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,7 +41,6 @@ type Iter struct {
 
 	cache struct {
 		err   error
-		ok    bool
 		key   string
 		value io.Reader
 	}
@@ -155,9 +153,6 @@ func (tx *Tx) Ascend(ctx context.Context, begin, end string) (kv.Iterator, error
 		return nil, string2error(resp.Error)
 	}
 	it := &Iter{db: tx.db, id: req.Name}
-	if err := it.init(ctx); err != nil {
-		return nil, err
-	}
 	return it, nil
 }
 
@@ -176,9 +171,6 @@ func (tx *Tx) Descend(ctx context.Context, begin, end string) (kv.Iterator, erro
 		return nil, string2error(resp.Error)
 	}
 	it := &Iter{db: tx.db, id: req.Name}
-	if err := it.init(ctx); err != nil {
-		return nil, err
-	}
 	return it, nil
 }
 
@@ -192,9 +184,6 @@ func (tx *Tx) Scan(ctx context.Context) (kv.Iterator, error) {
 		return nil, string2error(resp.Error)
 	}
 	it := &Iter{db: tx.db, id: req.Name}
-	if err := it.init(ctx); err != nil {
-		return nil, err
-	}
 	return it, nil
 }
 
@@ -249,9 +238,6 @@ func (snap *Snap) Ascend(ctx context.Context, begin, end string) (kv.Iterator, e
 		return nil, string2error(resp.Error)
 	}
 	it := &Iter{db: snap.db, id: req.Name}
-	if err := it.init(ctx); err != nil {
-		return nil, err
-	}
 	return it, nil
 }
 
@@ -270,9 +256,6 @@ func (snap *Snap) Descend(ctx context.Context, begin, end string) (kv.Iterator, 
 		return nil, string2error(resp.Error)
 	}
 	it := &Iter{db: snap.db, id: req.Name}
-	if err := it.init(ctx); err != nil {
-		return nil, err
-	}
 	return it, nil
 }
 
@@ -286,9 +269,6 @@ func (snap *Snap) Scan(ctx context.Context) (kv.Iterator, error) {
 		return nil, string2error(resp.Error)
 	}
 	it := &Iter{db: snap.db, id: req.Name}
-	if err := it.init(ctx); err != nil {
-		return nil, err
-	}
 	return it, nil
 }
 
@@ -304,61 +284,27 @@ func (snap *Snap) Discard(ctx context.Context) error {
 	return nil
 }
 
-func (it *Iter) init(ctx context.Context) error {
-	req := &api.CurrentRequest{Iterator: it.id}
-	resp, err := doPost[api.NextResponse](ctx, it.db, "/it/current", req)
-	if err != nil {
-		return err
-	}
-	if len(resp.Error) != 0 {
-		return string2error(resp.Error)
-	}
-	if !resp.OK {
-		it.cache.err = io.EOF
-		return nil
-	}
-	it.cache.ok = true
-	it.cache.key = resp.Key
-	it.cache.value = bytes.NewReader(resp.Value)
-	return nil
-}
-
-func (it *Iter) Err() error {
-	if !errors.Is(it.cache.err, io.EOF) {
-		return it.cache.err
-	}
-	return nil
-}
-
-func (it *Iter) Current(ctx context.Context) (string, io.Reader, bool) {
+func (it *Iter) Fetch(ctx context.Context, advance bool) (string, io.Reader, error) {
 	if it.cache.err != nil {
-		return "", nil, false
+		return "", nil, it.cache.err
 	}
-	return it.cache.key, it.cache.value, it.cache.ok
-}
-
-func (it *Iter) Next(ctx context.Context) (string, io.Reader, bool) {
-	if it.cache.err != nil {
-		return "", nil, false
+	// We can return from cache when advance is false.
+	if !advance && it.cache.key != "" {
+		return it.cache.key, it.cache.value, nil
 	}
-	req := &api.NextRequest{Iterator: it.id}
-	resp, err := doPost[api.NextResponse](ctx, it.db, "/it/next", req)
+	req := &api.FetchRequest{Iterator: it.id, Advance: advance}
+	resp, err := doPost[api.FetchResponse](ctx, it.db, "/it/fetch", req)
 	if err != nil {
 		it.cache.err = err
-		return "", nil, false
+		return "", nil, it.cache.err
 	}
 	if len(resp.Error) != 0 {
 		it.cache.err = string2error(resp.Error)
-		return "", nil, false
+		return "", nil, it.cache.err
 	}
-	if !resp.OK {
-		it.cache.err = io.EOF
-		return "", nil, false
-	}
-	it.cache.ok = true
 	it.cache.key = resp.Key
 	it.cache.value = bytes.NewReader(resp.Value)
-	return it.cache.key, it.cache.value, it.cache.ok
+	return it.cache.key, it.cache.value, nil
 }
 
 func doPost[RESP, REQ any](ctx context.Context, db *DB, subpath string, req *REQ) (*RESP, error) {

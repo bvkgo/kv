@@ -4,6 +4,8 @@ package kvtests
 
 import (
 	"context"
+	"errors"
+	"io"
 
 	"github.com/bvkgo/kv"
 )
@@ -17,13 +19,13 @@ func Clear(ctx context.Context, db kv.Database) error {
 		}
 		defer kv.Close(it)
 
-		for k, _, ok := it.Current(ctx); ok; k, _, ok = it.Next(ctx) {
+		for k, _, err := it.Fetch(ctx, true); err == nil; k, _, err = it.Fetch(ctx, true) {
 			if err := rw.Delete(ctx, k); err != nil {
 				return err
 			}
 		}
 
-		if err := it.Err(); err != nil {
+		if _, _, err := it.Fetch(ctx, false); err != nil && !errors.Is(err, io.EOF) {
 			return err
 		}
 		return nil

@@ -30,11 +30,7 @@ type Deleter interface {
 
 // Iterator represents a position in a range of key-value pairs visited by
 // Ascend, Descend and Scan operations. If there is any error in reading a
-// key-value pair, it is recorded in the iterator and the iteration is stopped.
-//
-// When used with transactions, only the key-value pairs that are returned
-// through Current and Next are considered as READ by the transaction for
-// conflict resolution.
+// key-value pair, it is retained in the iterator and the iteration is stopped.
 //
 //	it, err := db.Ascend(ctx, "aaa", "zzz")
 //	if err != nil {
@@ -42,7 +38,7 @@ type Deleter interface {
 //	}
 //	defer kv.Close(it)
 //
-//	for k, v, err := it.Fetch(ctx, true); err == nil; k, v, err = it.Fetch(ctx, true) {
+//	for k, v, err := it.Fetch(ctx, false); err == nil; k, v, err = it.Fetch(ctx, true) {
 //	  ...
 //	  if ... {
 //	    break
@@ -50,17 +46,18 @@ type Deleter interface {
 //	  ...
 //	}
 //
-//	if _, _, err := it.Fetch(ctx, false); err != nil && !errors.Is(err, io.EOF) {
+//	if err := it.Fetch(ctx, false); err != nil && !errors.Is(err, io.EOF) {
 //	  return err
 //	}
 type Iterator interface {
-	// Fetch returns the key, value pair at current iterator position. If advance
-	// parameter is true, iterator position is advanced to the next
-	// element. Returns io.EOF when the iterator reaches to the end.
+	// Fetch returns the key-value pair at the current iterator position or the
+	// next position. If next parameter is true, iterator position is
+	// pre-incremented (or pre-decremented) before fetching the key-value pair.
 	//
-	// Returns a non-nil error if iterator encounters any failures and the same
-	// error is repeated for all further calls.
-	Fetch(ctx context.Context, advance bool) (string, io.Reader, error)
+	// Returns io.EOF when the iterator reaches to the end. Returns a non-nil
+	// error if iterator encounters any failures and the same error is repeated
+	// for all further calls.
+	Fetch(ctx context.Context, next bool) (string, io.Reader, error)
 }
 
 type Ranger interface {

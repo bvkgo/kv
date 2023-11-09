@@ -150,7 +150,7 @@ func (rt *TemplateRuntime) RunStep(ctx context.Context, s *TemplateStep) (*Templ
 
 	case "fetch":
 		iter := rt.itMap[s.Iterator]
-		result.Key, result.Value, result.Status = iter.Fetch(ctx, s.Advance)
+		result.Key, result.Value, result.Status = iter.Fetch(ctx, s.Next)
 
 	case "new-transaction":
 		db := rt.dbMap[s.Database]

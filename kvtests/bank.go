@@ -86,7 +86,7 @@ func (b *BankTest) FindTotalBalance(ctx context.Context) (int64, error) {
 		}
 		defer kv.Close(it)
 
-		for k, v, err := it.Fetch(ctx, true); err == nil; k, v, err = it.Fetch(ctx, true) {
+		for k, v, err := it.Fetch(ctx, false); err == nil; k, v, err = it.Fetch(ctx, true) {
 			a, err := internal.LoadAccount(k, v)
 			if err != nil {
 				return err
@@ -216,7 +216,7 @@ func (b *BankTest) verifyDB(ctx context.Context) error {
 		count := 0
 		total := int64(0)
 
-		for k, v, err := it.Fetch(ctx, true); err == nil; k, v, err = it.Fetch(ctx, true) {
+		for k, v, err := it.Fetch(ctx, false); err == nil; k, v, err = it.Fetch(ctx, true) {
 			a, err := internal.LoadAccount(k, v)
 			if err != nil {
 				return err

@@ -538,7 +538,7 @@ func (s *server) fetch(ctx context.Context, u *url.URL, req *api.FetchRequest) (
 	if !ok {
 		return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 	}
-	k, v, err := it.Fetch(ctx, req.Advance)
+	k, v, err := it.Fetch(ctx, req.Next)
 	if err == nil {
 		data, err := io.ReadAll(v)
 		if err != nil {

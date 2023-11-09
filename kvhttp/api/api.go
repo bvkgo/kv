@@ -97,7 +97,7 @@ type ScanResponse struct {
 type FetchRequest struct {
 	Iterator string
 
-	Advance bool
+	Next bool
 }
 
 type FetchResponse struct {

@@ -39,12 +39,13 @@ func (it *Iterator) Fetch(ctx context.Context, advance bool) (string, io.Reader,
 		return it.i >= 0
 	}
 
+	if advance {
+		it.i += it.incr
+	}
+
 	for ; stop(); it.i += it.incr {
 		key := it.keys[it.i]
 		if value, err := it.getter(ctx, key); err == nil {
-			if advance {
-				it.i += it.incr
-			}
 			return key, value, nil
 		}
 	}

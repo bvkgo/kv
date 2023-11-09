@@ -54,7 +54,7 @@ var ops = []TemplateOp{
 //
 // tx:%s ascend begin:%s end:%s    => nil it:%s
 //
-// it:%s fetch advance:true      => key:%s value:%s error:%s
+// it:%s fetch next:true      => key:%s value:%s error:%s
 //
 // Database commands above are parsed and validated into an object which can
 // be used to run the command on a user database.
@@ -69,9 +69,9 @@ type TemplateStep struct {
 	Snapshot    string
 	Iterator    string
 
-	Key     string
-	Value   string
-	Advance bool
+	Key   string
+	Value string
+	Next  bool
 
 	Begin string
 	End   string
@@ -131,15 +131,15 @@ func ParseTemplateStep(s string) (*TemplateStep, error) {
 			step.Value = strings.TrimPrefix(word, "value:")
 			step.prefixMap["value"] = struct{}{}
 
-		case strings.HasPrefix(word, "advance:"):
-			if v := strings.TrimPrefix(word, "advance:"); v == "true" {
-				step.Advance = true
+		case strings.HasPrefix(word, "next:"):
+			if v := strings.TrimPrefix(word, "next:"); v == "true" {
+				step.Next = true
 			} else if v == "false" {
-				step.Advance = false
+				step.Next = false
 			} else {
-				return nil, fmt.Errorf("fetch op's advance value must be `true` or `false`")
+				return nil, fmt.Errorf("fetch op's next value must be `true` or `false`")
 			}
-			step.prefixMap["advance"] = struct{}{}
+			step.prefixMap["next"] = struct{}{}
 
 		case strings.HasPrefix(word, "error:"):
 			step.Error = strings.TrimPrefix(word, "error:")

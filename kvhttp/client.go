@@ -284,15 +284,15 @@ func (snap *Snap) Discard(ctx context.Context) error {
 	return nil
 }
 
-func (it *Iter) Fetch(ctx context.Context, advance bool) (string, io.Reader, error) {
+func (it *Iter) Fetch(ctx context.Context, next bool) (string, io.Reader, error) {
 	if it.cache.err != nil {
 		return "", nil, it.cache.err
 	}
 	// We can return from cache when advance is false.
-	if !advance && it.cache.key != "" {
+	if !next && it.cache.key != "" {
 		return it.cache.key, it.cache.value, nil
 	}
-	req := &api.FetchRequest{Iterator: it.id, Advance: advance}
+	req := &api.FetchRequest{Iterator: it.id, Next: next}
 	resp, err := doPost[api.FetchResponse](ctx, it.db, "/it/fetch", req)
 	if err != nil {
 		it.cache.err = err

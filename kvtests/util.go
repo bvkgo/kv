@@ -19,7 +19,7 @@ func Clear(ctx context.Context, db kv.Database) error {
 		}
 		defer kv.Close(it)
 
-		for k, _, err := it.Fetch(ctx, true); err == nil; k, _, err = it.Fetch(ctx, true) {
+		for k, _, err := it.Fetch(ctx, false); err == nil; k, _, err = it.Fetch(ctx, true) {
 			if err := rw.Delete(ctx, k); err != nil {
 				return err
 			}

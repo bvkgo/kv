@@ -46,7 +46,7 @@ type Deleter interface {
 //	  ...
 //	}
 //
-//	if err := it.Fetch(ctx, false); err != nil && !errors.Is(err, io.EOF) {
+//	if _, _, err := it.Fetch(ctx, false); err != nil && !errors.Is(err, io.EOF) {
 //	  return err
 //	}
 type Iterator interface {

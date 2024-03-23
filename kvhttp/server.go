@@ -34,7 +34,7 @@ type server struct {
 
 	dbPath, txPath, itPath, snapPath string
 
-	nameMap sync.Map // map[string]*idLock
+	nameMap syncmap.Map[string, *idLock]
 
 	txMap   syncmap.Map[uuid.UUID, kv.Transaction]
 	itMap   syncmap.Map[uuid.UUID, kv.Iterator]
@@ -104,9 +104,8 @@ func (s *server) LockCreate(name string) (id uuid.UUID, exists bool) {
 		id: uuid.New(),
 	}
 	if v, loaded := s.nameMap.LoadOrStore(name, n); loaded {
-		x := v.(*idLock)
-		x.mu.Lock()
-		return x.id, true
+		v.mu.Lock()
+		return v.id, true
 	}
 	n.mu.Lock()
 	return n.id, false
@@ -117,18 +116,19 @@ func (s *server) LockExisting(name string) (id uuid.UUID, ok bool) {
 	if !ok {
 		return id, false
 	}
-	x := v.(*idLock)
-	x.mu.Lock()
-	return x.id, true
+	v.mu.Lock()
+	return v.id, true
 }
 
 func (s *server) Unlock(name string, delete bool) {
-	v, _ := s.nameMap.Load(name)
+	v, ok := s.nameMap.Load(name)
+	if !ok {
+		return
+	}
 	if delete {
 		s.nameMap.Delete(name)
 	}
-	x := v.(*idLock)
-	x.mu.Unlock()
+	v.mu.Unlock()
 }
 
 type statusErr struct {

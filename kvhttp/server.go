@@ -17,6 +17,7 @@ import (
 	"sync"
 
 	"github.com/bvkgo/kv"
+	"github.com/bvkgo/kv/internal/syncmap"
 	"github.com/bvkgo/kv/kvhttp/api"
 	"github.com/google/uuid"
 )
@@ -35,9 +36,9 @@ type server struct {
 
 	nameMap sync.Map // map[string]*idLock
 
-	txMap   map[uuid.UUID]kv.Transaction
-	itMap   map[uuid.UUID]kv.Iterator
-	snapMap map[uuid.UUID]kv.Snapshot
+	txMap   syncmap.Map[uuid.UUID, kv.Transaction]
+	itMap   syncmap.Map[uuid.UUID, kv.Iterator]
+	snapMap syncmap.Map[uuid.UUID, kv.Snapshot]
 
 	txItersMap   map[uuid.UUID][]uuid.UUID
 	snapItersMap map[uuid.UUID][]uuid.UUID
@@ -48,9 +49,6 @@ func Handler(db kv.Database) http.Handler {
 		db:  db,
 		mux: http.NewServeMux(),
 
-		txMap:        make(map[uuid.UUID]kv.Transaction),
-		itMap:        make(map[uuid.UUID]kv.Iterator),
-		snapMap:      make(map[uuid.UUID]kv.Snapshot),
 		txItersMap:   make(map[uuid.UUID][]uuid.UUID),
 		snapItersMap: make(map[uuid.UUID][]uuid.UUID),
 	}
@@ -81,15 +79,23 @@ func Handler(db kv.Database) http.Handler {
 }
 
 func (s *server) Close() error {
-	for _, it := range s.itMap {
+	s.itMap.Range(func(_ uuid.UUID, it kv.Iterator) bool {
 		kv.Close(it)
-	}
-	for _, snap := range s.snapMap {
+		return true
+	})
+	s.itMap = syncmap.Map[uuid.UUID, kv.Iterator]{}
+
+	s.snapMap.Range(func(_ uuid.UUID, snap kv.Snapshot) bool {
 		snap.Discard(context.Background())
-	}
-	for _, tx := range s.txMap {
+		return true
+	})
+	s.snapMap = syncmap.Map[uuid.UUID, kv.Snapshot]{}
+
+	s.txMap.Range(func(_ uuid.UUID, tx kv.Transaction) bool {
 		tx.Rollback(context.Background())
-	}
+		return true
+	})
+	s.txMap = syncmap.Map[uuid.UUID, kv.Transaction]{}
 	return nil
 }
 
@@ -199,7 +205,7 @@ func (s *server) newTransaction(ctx context.Context, u *url.URL, req *api.NewTra
 		return &api.NewTransactionResponse{Error: error2string(err)}, nil
 	}
 
-	s.txMap[id] = tx
+	s.txMap.Store(id, tx)
 	return &api.NewTransactionResponse{}, nil
 }
 
@@ -210,7 +216,7 @@ func (s *server) set(ctx context.Context, u *url.URL, req *api.SetRequest) (*api
 	}
 	defer s.Unlock(req.Transaction, false /* delete */)
 
-	tx, ok := s.txMap[id]
+	tx, ok := s.txMap.Load(id)
 	if !ok {
 		return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 	}
@@ -228,7 +234,7 @@ func (s *server) del(ctx context.Context, u *url.URL, req *api.DeleteRequest) (*
 	}
 	defer s.Unlock(req.Transaction, false /* delete */)
 
-	tx, ok := s.txMap[id]
+	tx, ok := s.txMap.Load(id)
 	if !ok {
 		return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 	}
@@ -246,15 +252,17 @@ func (s *server) commit(ctx context.Context, u *url.URL, req *api.CommitRequest)
 	}
 	defer s.Unlock(req.Transaction, true /* delete */)
 
-	tx, ok := s.txMap[id]
+	tx, ok := s.txMap.Load(id)
 	if !ok {
 		return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 	}
-	delete(s.txMap, id)
+	s.txMap.Delete(id)
 
 	for _, key := range s.txItersMap[id] {
-		kv.Close(s.itMap[key])
-		delete(s.itMap, key)
+		if it, ok := s.itMap.Load(key); ok {
+			kv.Close(it)
+			s.itMap.Delete(key)
+		}
 	}
 	delete(s.txItersMap, id)
 
@@ -271,15 +279,17 @@ func (s *server) rollback(ctx context.Context, u *url.URL, req *api.RollbackRequ
 	}
 	defer s.Unlock(req.Transaction, true /* delete */)
 
-	tx, ok := s.txMap[id]
+	tx, ok := s.txMap.Load(id)
 	if !ok {
 		return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 	}
-	delete(s.txMap, id)
+	s.txMap.Delete(id)
 
 	for _, key := range s.txItersMap[id] {
-		kv.Close(s.itMap[key])
-		delete(s.itMap, key)
+		if it, ok := s.itMap.Load(key); ok {
+			kv.Close(it)
+			s.itMap.Delete(key)
+		}
 	}
 	delete(s.txItersMap, id)
 
@@ -302,7 +312,7 @@ func (s *server) newSnapshot(ctx context.Context, u *url.URL, req *api.NewSnapsh
 		return &api.NewSnapshotResponse{Error: error2string(err)}, nil
 	}
 
-	s.snapMap[id] = snap
+	s.snapMap.Store(id, snap)
 	return &api.NewSnapshotResponse{}, nil
 }
 
@@ -313,15 +323,17 @@ func (s *server) discard(ctx context.Context, u *url.URL, req *api.DiscardReques
 	}
 	defer s.Unlock(req.Snapshot, true /* delete */)
 
-	snap, ok := s.snapMap[id]
+	snap, ok := s.snapMap.Load(id)
 	if !ok {
 		return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 	}
-	delete(s.snapMap, id)
+	s.snapMap.Delete(id)
 
 	for _, key := range s.snapItersMap[id] {
-		kv.Close(s.itMap[key])
-		delete(s.itMap, key)
+		if it, ok := s.itMap.Load(key); ok {
+			kv.Close(it)
+			s.itMap.Delete(key)
+		}
 	}
 	delete(s.snapItersMap, id)
 
@@ -347,7 +359,7 @@ func (s *server) get(ctx context.Context, u *url.URL, req *api.GetRequest) (*api
 		}
 		defer s.Unlock(req.Transaction, false /* delete */)
 
-		tx, ok := s.txMap[id]
+		tx, ok := s.txMap.Load(id)
 		if !ok {
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
@@ -359,7 +371,7 @@ func (s *server) get(ctx context.Context, u *url.URL, req *api.GetRequest) (*api
 		}
 		defer s.Unlock(req.Snapshot, false /* delete */)
 
-		snap, ok := s.snapMap[id]
+		snap, ok := s.snapMap.Load(id)
 		if !ok {
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
@@ -399,7 +411,7 @@ func (s *server) ascend(ctx context.Context, u *url.URL, req *api.AscendRequest)
 		}
 		defer s.Unlock(req.Transaction, false /* delete */)
 
-		tx, ok := s.txMap[id]
+		tx, ok := s.txMap.Load(id)
 		if !ok {
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
@@ -411,7 +423,7 @@ func (s *server) ascend(ctx context.Context, u *url.URL, req *api.AscendRequest)
 		}
 		defer s.Unlock(req.Snapshot, false /* delete */)
 
-		snap, ok := s.snapMap[id]
+		snap, ok := s.snapMap.Load(id)
 		if !ok {
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
@@ -422,7 +434,7 @@ func (s *server) ascend(ctx context.Context, u *url.URL, req *api.AscendRequest)
 	if err != nil {
 		return &api.AscendResponse{Error: error2string(err)}, nil
 	}
-	s.itMap[id] = it
+	s.itMap.Store(id, it)
 
 	return &api.AscendResponse{}, nil
 }
@@ -449,7 +461,7 @@ func (s *server) descend(ctx context.Context, u *url.URL, req *api.DescendReques
 		}
 		defer s.Unlock(req.Transaction, false /* delete */)
 
-		tx, ok := s.txMap[id]
+		tx, ok := s.txMap.Load(id)
 		if !ok {
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
@@ -461,7 +473,7 @@ func (s *server) descend(ctx context.Context, u *url.URL, req *api.DescendReques
 		}
 		defer s.Unlock(req.Snapshot, false /* delete */)
 
-		snap, ok := s.snapMap[id]
+		snap, ok := s.snapMap.Load(id)
 		if !ok {
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
@@ -472,7 +484,7 @@ func (s *server) descend(ctx context.Context, u *url.URL, req *api.DescendReques
 	if err != nil {
 		return &api.DescendResponse{Error: error2string(err)}, nil
 	}
-	s.itMap[id] = it
+	s.itMap.Store(id, it)
 
 	return &api.DescendResponse{}, nil
 }
@@ -499,7 +511,7 @@ func (s *server) scan(ctx context.Context, u *url.URL, req *api.ScanRequest) (*a
 		}
 		defer s.Unlock(req.Transaction, false /* delete */)
 
-		tx, ok := s.txMap[id]
+		tx, ok := s.txMap.Load(id)
 		if !ok {
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
@@ -511,7 +523,7 @@ func (s *server) scan(ctx context.Context, u *url.URL, req *api.ScanRequest) (*a
 		}
 		defer s.Unlock(req.Snapshot, false /* delete */)
 
-		snap, ok := s.snapMap[id]
+		snap, ok := s.snapMap.Load(id)
 		if !ok {
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
@@ -522,7 +534,7 @@ func (s *server) scan(ctx context.Context, u *url.URL, req *api.ScanRequest) (*a
 	if err != nil {
 		return &api.ScanResponse{Error: error2string(err)}, nil
 	}
-	s.itMap[id] = it
+	s.itMap.Store(id, it)
 
 	return &api.ScanResponse{}, nil
 }
@@ -534,7 +546,7 @@ func (s *server) fetch(ctx context.Context, u *url.URL, req *api.FetchRequest) (
 	}
 	defer s.Unlock(req.Iterator, false /* delete */)
 
-	it, ok := s.itMap[id]
+	it, ok := s.itMap.Load(id)
 	if !ok {
 		return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 	}

@@ -11,7 +11,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/bvkgo/kv/kvmemdb/internal/multival"
+	"github.com/bvkgo/kv/internal/multival"
 )
 
 type gobHeader struct {

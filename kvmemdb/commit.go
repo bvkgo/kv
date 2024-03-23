@@ -8,7 +8,7 @@ import (
 	"math"
 	"os"
 
-	"github.com/bvkgo/kv/kvmemdb/internal/multival"
+	"github.com/bvkgo/kv/internal/multival"
 )
 
 func (db *DB) commit(tx *Transaction) error {

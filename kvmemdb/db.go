@@ -7,8 +7,8 @@ import (
 	"sync"
 
 	"github.com/bvkgo/kv"
-	"github.com/bvkgo/kv/kvmemdb/internal/multival"
-	"github.com/bvkgo/kv/kvmemdb/internal/syncmap"
+	"github.com/bvkgo/kv/internal/multival"
+	"github.com/bvkgo/kv/internal/syncmap"
 )
 
 type DB struct {

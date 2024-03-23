@@ -34,23 +34,28 @@ type server struct {
 
 	dbPath, txPath, itPath, snapPath string
 
+	// nameMap holds a mapping from client assigned name to an unique, lockable
+	// uuid. Clients refer to iterators, snapshots and txes by their names, which
+	// are assigned unique uuids on the server side.
 	nameMap syncmap.Map[string, *idLock]
 
 	txMap   syncmap.Map[uuid.UUID, kv.Transaction]
 	itMap   syncmap.Map[uuid.UUID, kv.Iterator]
 	snapMap syncmap.Map[uuid.UUID, kv.Snapshot]
 
-	txItersMap   map[uuid.UUID][]uuid.UUID
-	snapItersMap map[uuid.UUID][]uuid.UUID
+	// txItersMap and snapItersMap hold slice of iterator names for a tx or
+	// snapshot. Multiple iterators can be live simultaneously for a single tx
+	// (or snapshot). Iterators are closed automatically when tx or snapshot is
+	// done.
+
+	txItersMap   syncmap.Map[uuid.UUID, []string]
+	snapItersMap syncmap.Map[uuid.UUID, []string]
 }
 
 func Handler(db kv.Database) http.Handler {
 	s := &server{
 		db:  db,
 		mux: http.NewServeMux(),
-
-		txItersMap:   make(map[uuid.UUID][]uuid.UUID),
-		snapItersMap: make(map[uuid.UUID][]uuid.UUID),
 	}
 
 	s.mux.Handle("/new-tx", httpPostJSONHandler(s.newTransaction))
@@ -83,18 +88,16 @@ func (s *server) Close() error {
 		kv.Close(it)
 		return true
 	})
-	s.itMap = syncmap.Map[uuid.UUID, kv.Iterator]{}
-
 	s.snapMap.Range(func(_ uuid.UUID, snap kv.Snapshot) bool {
 		snap.Discard(context.Background())
 		return true
 	})
-	s.snapMap = syncmap.Map[uuid.UUID, kv.Snapshot]{}
-
 	s.txMap.Range(func(_ uuid.UUID, tx kv.Transaction) bool {
 		tx.Rollback(context.Background())
 		return true
 	})
+	s.itMap = syncmap.Map[uuid.UUID, kv.Iterator]{}
+	s.snapMap = syncmap.Map[uuid.UUID, kv.Snapshot]{}
 	s.txMap = syncmap.Map[uuid.UUID, kv.Transaction]{}
 	return nil
 }
@@ -118,6 +121,18 @@ func (s *server) LockExisting(name string) (id uuid.UUID, ok bool) {
 	}
 	v.mu.Lock()
 	return v.id, true
+}
+
+func (s *server) resolveName(name string) (id uuid.UUID, ok bool) {
+	v, ok := s.nameMap.Load(name)
+	if !ok {
+		return id, false
+	}
+	return v.id, true
+}
+
+func (s *server) deleteName(name string) {
+	s.nameMap.Delete(name)
 }
 
 func (s *server) Unlock(name string, delete bool) {
@@ -258,13 +273,19 @@ func (s *server) commit(ctx context.Context, u *url.URL, req *api.CommitRequest)
 	}
 	s.txMap.Delete(id)
 
-	for _, key := range s.txItersMap[id] {
-		if it, ok := s.itMap.Load(key); ok {
-			kv.Close(it)
-			s.itMap.Delete(key)
+	// Close all iterators and delete the iterator names as well.
+	if iters, ok := s.txItersMap.Load(id); ok {
+		for _, iter := range iters {
+			if id, ok := s.resolveName(iter); ok {
+				if it, ok := s.itMap.Load(id); ok {
+					kv.Close(it)
+				}
+				s.itMap.Delete(id)
+			}
+			s.deleteName(iter)
 		}
+		s.txItersMap.Delete(id)
 	}
-	delete(s.txItersMap, id)
 
 	if err := tx.Commit(ctx); err != nil {
 		return &api.CommitResponse{Error: error2string(err)}, nil
@@ -285,13 +306,18 @@ func (s *server) rollback(ctx context.Context, u *url.URL, req *api.RollbackRequ
 	}
 	s.txMap.Delete(id)
 
-	for _, key := range s.txItersMap[id] {
-		if it, ok := s.itMap.Load(key); ok {
-			kv.Close(it)
-			s.itMap.Delete(key)
+	if iters, ok := s.txItersMap.Load(id); ok {
+		for _, iter := range iters {
+			if id, ok := s.resolveName(iter); ok {
+				if it, ok := s.itMap.Load(id); ok {
+					kv.Close(it)
+					s.itMap.Delete(id)
+				}
+			}
+			s.deleteName(iter)
 		}
+		s.txItersMap.Delete(id)
 	}
-	delete(s.txItersMap, id)
 
 	if err := tx.Rollback(ctx); err != nil {
 		return &api.RollbackResponse{Error: error2string(err)}, nil
@@ -329,13 +355,18 @@ func (s *server) discard(ctx context.Context, u *url.URL, req *api.DiscardReques
 	}
 	s.snapMap.Delete(id)
 
-	for _, key := range s.snapItersMap[id] {
-		if it, ok := s.itMap.Load(key); ok {
-			kv.Close(it)
-			s.itMap.Delete(key)
+	if iters, ok := s.snapItersMap.Load(id); ok {
+		for _, iter := range iters {
+			if id, ok := s.resolveName(iter); ok {
+				if it, ok := s.itMap.Load(id); ok {
+					kv.Close(it)
+					s.itMap.Delete(id)
+				}
+			}
+			s.deleteName(iter)
 		}
+		s.snapItersMap.Delete(id)
 	}
-	delete(s.snapItersMap, id)
 
 	if err := snap.Discard(ctx); err != nil {
 		return &api.DiscardResponse{Error: error2string(err)}, nil
@@ -404,6 +435,8 @@ func (s *server) ascend(ctx context.Context, u *url.URL, req *api.AscendRequest)
 	}
 
 	var ranger kv.Ranger
+	var rangerID uuid.UUID
+	var rangerItersMap *syncmap.Map[uuid.UUID, []string]
 	if len(req.Transaction) != 0 {
 		id, ok := s.LockExisting(req.Transaction)
 		if !ok {
@@ -416,6 +449,8 @@ func (s *server) ascend(ctx context.Context, u *url.URL, req *api.AscendRequest)
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		ranger = tx
+		rangerID = id
+		rangerItersMap = &s.txItersMap
 	} else {
 		id, ok := s.LockExisting(req.Snapshot)
 		if !ok {
@@ -428,13 +463,20 @@ func (s *server) ascend(ctx context.Context, u *url.URL, req *api.AscendRequest)
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		ranger = snap
+		rangerID = id
+		rangerItersMap = &s.snapItersMap
 	}
 
 	it, err := ranger.Ascend(ctx, req.Begin, req.End)
 	if err != nil {
 		return &api.AscendResponse{Error: error2string(err)}, nil
 	}
+
+	// save the iterator id in iterators-map and it's name in one of tx's or
+	// snapshot's iterators map.
 	s.itMap.Store(id, it)
+	iters, _ := rangerItersMap.Load(rangerID)
+	rangerItersMap.Store(rangerID, append(iters, req.Name))
 
 	return &api.AscendResponse{}, nil
 }
@@ -454,6 +496,8 @@ func (s *server) descend(ctx context.Context, u *url.URL, req *api.DescendReques
 	}
 
 	var ranger kv.Ranger
+	var rangerID uuid.UUID
+	var rangerItersMap *syncmap.Map[uuid.UUID, []string]
 	if len(req.Transaction) != 0 {
 		id, ok := s.LockExisting(req.Transaction)
 		if !ok {
@@ -466,6 +510,8 @@ func (s *server) descend(ctx context.Context, u *url.URL, req *api.DescendReques
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		ranger = tx
+		rangerID = id
+		rangerItersMap = &s.txItersMap
 	} else {
 		id, ok := s.LockExisting(req.Snapshot)
 		if !ok {
@@ -478,13 +524,20 @@ func (s *server) descend(ctx context.Context, u *url.URL, req *api.DescendReques
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		ranger = snap
+		rangerID = id
+		rangerItersMap = &s.snapItersMap
 	}
 
 	it, err := ranger.Descend(ctx, req.Begin, req.End)
 	if err != nil {
 		return &api.DescendResponse{Error: error2string(err)}, nil
 	}
+
+	// save the iterator id in iterators-map and it's name in one of tx's or
+	// snapshot's iterators map.
 	s.itMap.Store(id, it)
+	iters, _ := rangerItersMap.Load(rangerID)
+	rangerItersMap.Store(rangerID, append(iters, req.Name))
 
 	return &api.DescendResponse{}, nil
 }
@@ -504,6 +557,8 @@ func (s *server) scan(ctx context.Context, u *url.URL, req *api.ScanRequest) (*a
 	}
 
 	var scanner kv.Scanner
+	var scannerID uuid.UUID
+	var scannerItersMap *syncmap.Map[uuid.UUID, []string]
 	if len(req.Transaction) != 0 {
 		id, ok := s.LockExisting(req.Transaction)
 		if !ok {
@@ -516,6 +571,8 @@ func (s *server) scan(ctx context.Context, u *url.URL, req *api.ScanRequest) (*a
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		scanner = tx
+		scannerID = id
+		scannerItersMap = &s.txItersMap
 	} else {
 		id, ok := s.LockExisting(req.Snapshot)
 		if !ok {
@@ -528,13 +585,20 @@ func (s *server) scan(ctx context.Context, u *url.URL, req *api.ScanRequest) (*a
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		scanner = snap
+		scannerID = id
+		scannerItersMap = &s.snapItersMap
 	}
 
 	it, err := scanner.Scan(ctx)
 	if err != nil {
 		return &api.ScanResponse{Error: error2string(err)}, nil
 	}
+
+	// save the iterator id in iterators-map and it's name in one of tx's or
+	// snapshot's iterators map.
 	s.itMap.Store(id, it)
+	iters, _ := scannerItersMap.Load(scannerID)
+	scannerItersMap.Store(scannerID, append(iters, req.Name))
 
 	return &api.ScanResponse{}, nil
 }

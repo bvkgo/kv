@@ -217,6 +217,7 @@ func (s *server) newTransaction(ctx context.Context, u *url.URL, req *api.NewTra
 
 	tx, err := s.db.NewTransaction(ctx)
 	if err != nil {
+		s.deleteName(req.Name)
 		return &api.NewTransactionResponse{Error: error2string(err)}, nil
 	}
 
@@ -335,6 +336,7 @@ func (s *server) newSnapshot(ctx context.Context, u *url.URL, req *api.NewSnapsh
 
 	snap, err := s.db.NewSnapshot(ctx)
 	if err != nil {
+		s.deleteName(req.Name)
 		return &api.NewSnapshotResponse{Error: error2string(err)}, nil
 	}
 
@@ -440,12 +442,14 @@ func (s *server) ascend(ctx context.Context, u *url.URL, req *api.AscendRequest)
 	if len(req.Transaction) != 0 {
 		id, ok := s.LockExisting(req.Transaction)
 		if !ok {
+			s.deleteName(req.Name)
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		defer s.Unlock(req.Transaction, false /* delete */)
 
 		tx, ok := s.txMap.Load(id)
 		if !ok {
+			s.deleteName(req.Name)
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		ranger = tx
@@ -454,12 +458,14 @@ func (s *server) ascend(ctx context.Context, u *url.URL, req *api.AscendRequest)
 	} else {
 		id, ok := s.LockExisting(req.Snapshot)
 		if !ok {
+			s.deleteName(req.Name)
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		defer s.Unlock(req.Snapshot, false /* delete */)
 
 		snap, ok := s.snapMap.Load(id)
 		if !ok {
+			s.deleteName(req.Name)
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		ranger = snap
@@ -469,6 +475,7 @@ func (s *server) ascend(ctx context.Context, u *url.URL, req *api.AscendRequest)
 
 	it, err := ranger.Ascend(ctx, req.Begin, req.End)
 	if err != nil {
+		s.deleteName(req.Name)
 		return &api.AscendResponse{Error: error2string(err)}, nil
 	}
 
@@ -501,12 +508,14 @@ func (s *server) descend(ctx context.Context, u *url.URL, req *api.DescendReques
 	if len(req.Transaction) != 0 {
 		id, ok := s.LockExisting(req.Transaction)
 		if !ok {
+			s.deleteName(req.Name)
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		defer s.Unlock(req.Transaction, false /* delete */)
 
 		tx, ok := s.txMap.Load(id)
 		if !ok {
+			s.deleteName(req.Name)
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		ranger = tx
@@ -515,12 +524,14 @@ func (s *server) descend(ctx context.Context, u *url.URL, req *api.DescendReques
 	} else {
 		id, ok := s.LockExisting(req.Snapshot)
 		if !ok {
+			s.deleteName(req.Name)
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		defer s.Unlock(req.Snapshot, false /* delete */)
 
 		snap, ok := s.snapMap.Load(id)
 		if !ok {
+			s.deleteName(req.Name)
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		ranger = snap
@@ -530,6 +541,7 @@ func (s *server) descend(ctx context.Context, u *url.URL, req *api.DescendReques
 
 	it, err := ranger.Descend(ctx, req.Begin, req.End)
 	if err != nil {
+		s.deleteName(req.Name)
 		return &api.DescendResponse{Error: error2string(err)}, nil
 	}
 
@@ -562,12 +574,14 @@ func (s *server) scan(ctx context.Context, u *url.URL, req *api.ScanRequest) (*a
 	if len(req.Transaction) != 0 {
 		id, ok := s.LockExisting(req.Transaction)
 		if !ok {
+			s.deleteName(req.Name)
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		defer s.Unlock(req.Transaction, false /* delete */)
 
 		tx, ok := s.txMap.Load(id)
 		if !ok {
+			s.deleteName(req.Name)
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		scanner = tx
@@ -576,12 +590,14 @@ func (s *server) scan(ctx context.Context, u *url.URL, req *api.ScanRequest) (*a
 	} else {
 		id, ok := s.LockExisting(req.Snapshot)
 		if !ok {
+			s.deleteName(req.Name)
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		defer s.Unlock(req.Snapshot, false /* delete */)
 
 		snap, ok := s.snapMap.Load(id)
 		if !ok {
+			s.deleteName(req.Name)
 			return nil, &statusErr{err: os.ErrNotExist, code: http.StatusNotFound}
 		}
 		scanner = snap
@@ -591,6 +607,7 @@ func (s *server) scan(ctx context.Context, u *url.URL, req *api.ScanRequest) (*a
 
 	it, err := scanner.Scan(ctx)
 	if err != nil {
+		s.deleteName(req.Name)
 		return &api.ScanResponse{Error: error2string(err)}, nil
 	}
 
